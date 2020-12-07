@@ -1,41 +1,46 @@
-import dataclasses
 import re
-from typing import ClassVar, List, Pattern
+from typing import List, Pattern
 
 import utils
 
 
-@dataclasses.dataclass(frozen=True)
-class Bag:
-    colour: str
+class Bags:
+    PATTERN: Pattern = r"(?P<count>[0-9 ]*)[ ]*(?P<colour>[a-z ]+) bag[s]{0,1}"
 
-    PATTERN: ClassVar[Pattern] = r"[0-9 ]*(?P<colour>[a-z ]+) bag[s]{0,1}"
+    def __init__(self, bag_strs: List[str]):
+        self._bags = {}
+        for bag_str in bag_strs:
+            (_, outer_colour), *inner_bags = re.findall(
+                self.PATTERN, bag_str
+            )
+            self._bags[outer_colour] = {
+                inner_colour: int(count) for count, inner_colour in inner_bags
+            }
 
+    @property
+    def colours(self):
+        return set(self._bags.keys())
 
-def parse_bags(bag_strs: List[str]):
-    for bag_str in bag_strs:
-        outer_bag_colour, *inner_bag_colours = re.findall(Bag.PATTERN, bag_str)
-        yield (
-            Bag(outer_bag_colour),
-            {Bag(inner_bag_colour) for inner_bag_colour in inner_bag_colours}
+    def walk(self, start_colour: str):
+        if start_colour in self._bags:
+            for colour in self._bags[start_colour]:
+                yield colour
+                yield from self.walk(colour)
+
+    def count_bags_in(self, start_colour):
+        if start_colour not in self._bags:
+            return 0
+        return sum(
+            count + count*self.count_bags_in(colour)
+            for colour, count in self._bags[start_colour].items()
         )
 
 
 if __name__ == "__main__":
-    bags = {
-        outer_bag: inner_bags
-        for outer_bag, inner_bags in parse_bags(utils.get_data(7).splitlines())
-    }
+    bags = Bags(utils.get_data(7).splitlines())
 
-    def contains_shiny_gold(outer_bag):
-        if outer_bag not in bags:
-            return False
-        if Bag("shiny gold") in bags[outer_bag]:
-            return True
-        return any(
-            contains_shiny_gold(inner_bag) for inner_bag in bags[outer_bag]
-        )
-
-    print(
-        sum(contains_shiny_gold(outer_bags) for outer_bags in bags.keys())
-    )
+    assert sum(
+        "shiny gold" in bags.walk(bag)
+        for bag in bags.colours
+    ) == 124
+    assert bags.count_bags_in("shiny gold") == 34862
