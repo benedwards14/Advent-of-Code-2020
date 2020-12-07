@@ -1,46 +1,58 @@
+from collections import defaultdict
+import dataclasses
 import re
-from typing import List, Pattern
+from typing import Dict, Generator, List, Pattern, Set, Tuple
 
 import utils
 
 
-class Bags:
-    PATTERN: Pattern = r"(?P<count>[0-9 ]*)[ ]*(?P<colour>[a-z ]+) bag[s]{0,1}"
+BAG_PATTERN: Pattern = r"(?P<count>[0-9 ]*)[ ]*(?P<colour>[a-z ]+) bag[s]{0,1}"
+LEAF_EDGE = Tuple[int, str]
 
-    def __init__(self, bag_strs: List[str]):
-        self._bags = {}
-        for bag_str in bag_strs:
-            (_, outer_colour), *inner_bags = re.findall(
-                self.PATTERN, bag_str
-            )
-            self._bags[outer_colour] = {
-                inner_colour: int(count) for count, inner_colour in inner_bags
-            }
 
-    @property
-    def colours(self):
-        return set(self._bags.keys())
+@dataclasses.dataclass
+class Leaf:
+    parents: Set[str] = dataclasses.field(default_factory=set)
+    children: List[LEAF_EDGE] = dataclasses.field(default_factory=list)
 
-    def walk(self, start_colour: str):
-        if start_colour in self._bags:
-            for colour in self._bags[start_colour]:
-                yield colour
-                yield from self.walk(colour)
 
-    def count_bags_in(self, start_colour):
-        if start_colour not in self._bags:
-            return 0
+@dataclasses.dataclass
+class Tree:
+    leaves: Dict[str, Leaf] = dataclasses.field(
+        default_factory=lambda: defaultdict(Leaf)
+    )
+
+    def add_leaf(self, name: str, children: List[Tuple[str, str]]):
+        for child_count, child_name in children:
+            self.leaves[name].children.append((int(child_count), child_name))
+            self.leaves[child_name].parents.add(name)
+
+    def walk_parents(self, leaf_name: str) -> Generator[str, None, None]:
+        for parent in self.leaves[leaf_name].parents:
+            yield parent
+            yield from self.walk_parents(parent)
+
+    def count_parents(self, leaf_name: str) -> int:
+        return len(set(self.walk_parents(leaf_name)))
+
+    def count_children(self, leaf_name: str) -> int:
         return sum(
-            count + count*self.count_bags_in(colour)
-            for colour, count in self._bags[start_colour].items()
+            count + count*self.count_children(name)
+            for count, name in self.leaves[leaf_name].children
         )
 
 
-if __name__ == "__main__":
-    bags = Bags(utils.get_data(7).splitlines())
+def parse_bags() -> Tree:
+    bag_tree = Tree()
+    for bag_str in utils.get_data(7).splitlines():
+        (_, bag_colour), *inner_bags = re.findall(BAG_PATTERN, bag_str)
+        bag_tree.add_leaf(bag_colour, inner_bags)
 
-    assert sum(
-        "shiny gold" in bags.walk(bag)
-        for bag in bags.colours
-    ) == 124
-    assert bags.count_bags_in("shiny gold") == 34862
+    return bag_tree
+
+
+if __name__ == "__main__":
+    bags = parse_bags()
+
+    assert bags.count_parents("shiny gold") == 124
+    assert bags.count_children("shiny gold") == 34862
