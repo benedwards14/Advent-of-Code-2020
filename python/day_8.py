@@ -1,7 +1,7 @@
 import copy
 import dataclasses
 import re
-from typing import List
+from typing import List, Optional
 
 import utils
 
@@ -13,85 +13,96 @@ SINGLE_INSTRUCTION = r"(acc|nop|jmp) ((\+|-)[0-9]*)"
 class Instruction:
     operation: str
     value: int
-    executed: bool = False
+    index: int
+    next_index: Optional[int] = None
+    prev_indices: List[int] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
 class Program:
     instructions: List[Instruction]
-    next_index: int = 0
-    accumulator: int = 0
 
-    @property
-    def next(self) -> Instruction:
-        return self.instructions[self.next_index]
+    def __iter__(self):
+        curr = self.instructions[0]
+        executed_indices = set()
+        while curr is not None:
+            yield curr
+            executed_indices.add(curr.index)
 
-    @property
-    def finished(self) -> bool:
-        return self.next_index == len(self.instructions)
-
+            if curr.next_index is None or curr.next_index in executed_indices:
+                break
+            curr = self.instructions[curr.next_index]
 
 
 def load_program() -> Program:
-    return Program(
-        [
-            Instruction(operation, int(value))
-            for operation, value, _ in re.findall(
-                SINGLE_INSTRUCTION, utils.get_data(8)
-            )
-        ]
-    )
+    instructions = [
+        Instruction(operation, int(value), index)
+        for index, (operation, value, _) in enumerate(
+            re.findall(SINGLE_INSTRUCTION, utils.get_data(8))
+        )
+    ]
+
+    for instruction in instructions:
+        if instruction.operation == "jmp":
+            next_index = instruction.index + instruction.value
+        else:
+            next_index = instruction.index + 1
+        if next_index < len(instructions):
+            instruction.next_index = next_index
+            instructions[next_index].prev_indices.append(instruction.index)
+
+    return Program(instructions)
 
 
 def run(program: Program) -> int:
-    while not program.finished:
-        if program.next.executed:
-            return program.accumulator
-        program.next.executed = True
-
-        if program.next.operation == "acc":
-            program.accumulator += program.next.value
-            program.next_index += 1
-
-        elif program.next.operation == "jmp":
-            program.next_index += program.next.value
-
-        elif program.next.operation == "nop":
-            program.next_index += 1
-        else:
-            assert False
-
-    return program.accumulator
+    return sum(
+        instruction.value
+        for instruction in program
+        if instruction.operation == "acc"
+    )
 
 
-def get_alternative_programs(
-    program: List[Program]
-) -> List[Program]:
-    alt_programs = []
-    for index, instruction in enumerate(program.instructions):
-        if instruction.operation == "acc":
-            continue
+def get_correct_instruction_set(
+    old_program: Program
+) -> List[Instruction]:
+    old_instructions = old_program.instructions
+    def walk_back(instruction):
+        yield instruction.index
+        for index in instruction.prev_indices:
+            yield from walk_back(old_instructions[index])
+    end_indices = {
+        index for index in walk_back(old_instructions[-1])
+    }
 
-        new_operation = "jmp" if instruction.operation == "nop" else "nop"
-        alt_programs.append(
-            Program(
-                copy.deepcopy(program.instructions[:index])
-                + [Instruction(new_operation, instruction.value)]+
-                copy.deepcopy(program.instructions[index + 1:])
+    new_instructions = copy.deepcopy(old_instructions)
+    new_program = Program(new_instructions)
+    for instruction in new_program:
+        change_to_index = None
+        if instruction.operation == "jmp":
+            if instruction.index + 1 in end_indices:
+                instruction.operation = "nop"
+                change_to_index = instruction.index + 1
+        elif instruction.operation == "nop":
+            if instruction.index + 1 in end_indices:
+                instruction.operation = "jmp"
+                change_to_index = instruction.index + instruction.value
+
+        if change_to_index is not None:
+            new_instructions[instruction.next_index].prev_indices.remove(
+                instruction.index
             )
-        )
+            instruction.next_index = change_to_index
+            new_instructions[instruction.next_index].prev_indices.append(
+                instruction.index
+            )
+            break
 
-    return alt_programs
+    return new_program
 
 
 if __name__ == "__main__":
     program = load_program()
-    alternative_programs = get_alternative_programs(program)
-
     assert run(program) == 2080
 
-    for alt_prog in alternative_programs:
-        accumulator = run(alt_prog)
-        if alt_prog.finished:
-            break
-    assert accumulator == 2477
+    new_program = get_correct_instruction_set(program)
+    assert run(new_program) == 2477
