@@ -24,8 +24,16 @@ class Edge:
 @dataclasses.dataclass
 class Image:
     tile_id: int
-    pixels: List[str]
+    _pixels: List[str]
     fixed = False
+
+    @property
+    def pixels(self) -> List[str]:
+        return [row[1:-1] for row in self._pixels[1:-1]]
+
+    @property
+    def actual_pixels(self) -> List[str]:
+        return self._pixels
 
     @property
     def edges(self) -> Set[Edge]:
@@ -33,33 +41,33 @@ class Image:
 
     @property
     def top(self) -> Edge:
-        return Edge(self.pixels[0])
+        return Edge(self._pixels[0])
 
     @property
     def bottom(self) -> Edge:
-        return Edge(self.pixels[-1])
+        return Edge(self._pixels[-1])
 
     @property
     def left(self) -> Edge:
-        return Edge("".join([row[0] for row in self.pixels]))
+        return Edge("".join([row[0] for row in self._pixels]))
 
     @property
     def right(self) -> Edge:
-        return Edge("".join([row[-1] for row in self.pixels]))
+        return Edge("".join([row[-1] for row in self._pixels]))
 
     def rotate(self):
         new_pixels = []
-        for i in range(len(self.pixels)):
-            new_pixels.append([row[-i-1] for row in self.pixels])
-        self.pixels = ["".join(row) for row in new_pixels]
+        for i in range(len(self._pixels)):
+            new_pixels.append([row[-i-1] for row in self._pixels])
+        self._pixels = ["".join(row) for row in new_pixels]
 
     def flip_x(self):
-        self.pixels = [
-            row[::-1] for row in self.pixels
+        self._pixels = [
+            row[::-1] for row in self._pixels
         ]
 
     def flip_y(self):
-        self.pixels = self.pixels[::-1]
+        self._pixels = self._pixels[::-1]
 
 
 @dataclasses.dataclass
@@ -134,7 +142,7 @@ def get_corner(tiles: Tiles) -> Image:
     return corner_tile
 
 
-def get_edge(image, tiles):
+def get_edge(image: Image, tiles: Tiles) -> List[List[Image]]:
     images = [[image]]
     last_image = image
     while not tiles.is_image_edge(last_image.bottom):
@@ -152,7 +160,7 @@ def get_edge(image, tiles):
     return images
 
 
-def get_row(images, tiles):
+def get_row(images: List[Image], tiles: Tiles) -> List[Image]:
     last_image = images[0]
     while not tiles.is_image_edge(last_image.right):
         next_image = tiles.get_next_right(last_image)
@@ -169,12 +177,40 @@ def get_row(images, tiles):
     return images
 
 
-def build_image(tiles: Tiles):
+def build_image(tiles: Tiles) -> List[List[Image]]:
     image = get_corner(tiles)
     images = get_edge(image, tiles)
     images = [get_row(row, tiles) for row in images]
 
     return images
+
+
+def combine_images(images: List[List[Image]]) -> List[str]:
+    final_image = []
+    for row in images:
+        for pixels in zip(*[image.pixels for image in row]):
+            final_image.append("".join(pixels))
+
+    return Image(0, final_image)
+
+
+def find_sea_monsters(image: Image) -> int:
+    sea_monster = (
+        "                  # \n"
+        "#    ##    ##    ###\n"
+        " #  #  #  #  #  #   "
+    )
+    sea_monster = sea_monster.replace(
+        "\n", f".{{{len(image.actual_pixels[0]) - len(sea_monster)//3}}}"
+    ).replace(" ", ".")
+
+    pattern = re.compile(f"(?=({sea_monster}))")
+    matches = pattern.findall("".join(image.actual_pixels))
+
+    return (
+        "".join(image.actual_pixels).count('#')
+        - (len(matches) * sea_monster.count('#'))
+    )
 
 
 if __name__ == "__main__":
@@ -188,3 +224,7 @@ if __name__ == "__main__":
         * images[0][-1].tile_id
         * images[-1][-1].tile_id
     ) == 51214443014783
+
+    final_image = combine_images(images)
+
+    assert find_sea_monsters(final_image) == 2065
