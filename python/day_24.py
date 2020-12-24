@@ -65,26 +65,20 @@ def get_black_tiles(tiles: List[Vector]) -> Set[Vector]:
 
 
 def daily_flip(black_tiles: Set[Vector]) -> Set[Vector]:
-    white_tiles = {
-        tile
-        for black_tile in black_tiles
-        for tile in black_tile.neighbours
-        if tile not in black_tiles
-    }
     new_black_tiles = set()
 
-    for tile in black_tiles:
-        black_neighbours = sum(
-            neighbour in black_tiles for neighbour in tile.neighbours
-        )
-        if black_neighbours in [1, 2]:
-            new_black_tiles.add(tile)
+    def black_neighbours(tile: Vector):
+        return sum(neighbour in black_tiles for neighbour in tile.neighbours)
 
-    for tile in white_tiles:
-        black_neighbours = sum(
-            neighbour in black_tiles for neighbour in tile.neighbours
-        )
-        if black_neighbours == 2:
+    for tile in black_tiles:
+        for neighbour in tile.neighbours:
+            if (
+                neighbour not in black_tiles
+                and black_neighbours(neighbour) == 2
+            ):
+                new_black_tiles.add(neighbour)
+
+        if black_neighbours(tile) in [1, 2]:
             new_black_tiles.add(tile)
 
     return new_black_tiles
@@ -103,6 +97,4 @@ if __name__ == "__main__":
     black_tiles = get_black_tiles(tiles)
     assert len(black_tiles) == 277
 
-    print(len(flip(black_tiles, 100)))
-
-
+    assert len(flip(black_tiles, 100)) == 3531
