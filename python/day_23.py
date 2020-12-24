@@ -114,4 +114,4 @@ if __name__ == "__main__":
         + list(range(10, 1000000 + 1))
     )
     cups = play(cups, 10000000)
-    print(cups[1].next.value * cups[1].next.next.value)
+    assert cups[1].next.value * cups[1].next.next.value == 680435423892
