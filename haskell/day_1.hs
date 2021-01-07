@@ -8,8 +8,7 @@ find2020Product combinations =
 
 
 getCombinations :: Integer -> [Integer] -> [[Integer]]
-getCombinations 0 numbers = []
-getCombinations 1 numbers = map (\num -> [num]) numbers
+getCombinations 0 numbers = [[]]
 getCombinations n numbers =
     [ x:y | x <- numbers, y <- curr_combinations, not $ x `elem` y ]
     where
